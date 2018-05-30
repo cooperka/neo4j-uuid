@@ -41,6 +41,9 @@ public class UuidModule extends BaseTxDrivenModule<Void> {
     public static final String DEFAULT_MODULE_ID = "UIDM";
     private static final int BATCH_SIZE = 1000;
 
+    private static final String CREATED_AT_PROPERTY = "createdAt";
+    private static final String UPDATED_AT_PROPERTY = "updatedAt";
+
     private final UuidGenerator uuidGenerator;
     private final UuidConfiguration uuidConfiguration;
     private final UuidIndexer uuidIndexer;
@@ -133,9 +136,11 @@ public class UuidModule extends BaseTxDrivenModule<Void> {
     }
 
     private <E extends Entity> void processEntities(Collection<E> created, Collection<E> deleted, Collection<Change<E>> updated) {
+        long timestamp = System.currentTimeMillis();
 
         for (E entity : created) {
             assignUuid(entity);
+            assignCreatedAt(entity, timestamp);
         }
 
         for (E entity : deleted) {
@@ -143,6 +148,8 @@ public class UuidModule extends BaseTxDrivenModule<Void> {
         }
 
         for (Change<E> change : updated) {
+            assignUpdatedAt(change.getCurrent(), timestamp);
+
             if (uuidHasBeenRemoved(change)) {
                 if (isImmutable()) {
                     throw new DeliberateTransactionRollbackException("You are not allowed to remove the " + uuidConfiguration.getUuidProperty() + " property");
@@ -210,6 +217,24 @@ public class UuidModule extends BaseTxDrivenModule<Void> {
         if (existingEntity != null && (existingEntity.getId() != entity.getId())) {
             throw new DeliberateTransactionRollbackException("Another " + existingEntity.getClass().getName() + " with UUID " + entity.getProperty(uuidProperty).toString() + " already exists (#" + existingEntity.getId() + ")!");
         }
+    }
+
+    private void assignCreatedAt(Entity entity, long timestamp) {
+        // Don't overwrite if it already exists.
+        if (!entity.hasProperty(CREATED_AT_PROPERTY)) {
+            assignNewCreatedAt(entity, timestamp);
+        }
+
+        // Always assign updatedAt.
+        assignUpdatedAt(entity, timestamp);
+    }
+
+    private void assignNewCreatedAt(Entity entity, long timestamp) {
+        entity.setProperty(CREATED_AT_PROPERTY, timestamp);
+    }
+
+    private void assignUpdatedAt(Entity entity, long timestamp) {
+        entity.setProperty(UPDATED_AT_PROPERTY, timestamp);
     }
 
     private boolean isImmutable() {
