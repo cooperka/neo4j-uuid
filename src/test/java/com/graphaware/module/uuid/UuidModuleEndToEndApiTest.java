@@ -25,11 +25,15 @@ import java.util.regex.Pattern;
 import static org.apache.http.HttpStatus.SC_NOT_FOUND;
 import static org.apache.http.HttpStatus.SC_OK;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertFalse;
 
 public class UuidModuleEndToEndApiTest extends GraphAwareIntegrationTest {
 
     public static final Pattern UUID_PATTERN = Pattern.compile("\\\"uuid\\\":\\\"([a-zA-Z0-9-]*)\\\"");
+    public static final Pattern CREATED_AT_PATTERN = Pattern.compile("\\\"createdAt\\\":([0-9]+)");
+    public static final Pattern UPDATED_AT_PATTERN = Pattern.compile("\\\"updatedAt\\\":([0-9]+)");
 
     @Override
     protected String configFile() {
@@ -67,6 +71,45 @@ public class UuidModuleEndToEndApiTest extends GraphAwareIntegrationTest {
     }
 
     @Test
+    public void testTimestampsWorkflow() {
+        //Create & Assign
+        httpClient.executeCypher(baseNeoUrl(), "CREATE (p:Person {name:'Luanne'})");
+
+        String response = httpClient.executeCypher(baseNeoUrl(), "MATCH (p:Person) RETURN p");
+
+        System.out.println(response);
+
+        Matcher createdAtMatcher = CREATED_AT_PATTERN.matcher(response);
+        assertTrue(createdAtMatcher.find());
+        String createdAt = createdAtMatcher.group(1);
+
+        Matcher updatedAtMatcher = UPDATED_AT_PATTERN.matcher(response);
+        assertTrue(updatedAtMatcher.find());
+        String updatedAt = updatedAtMatcher.group(1);
+
+        assertEquals(createdAt, updatedAt);
+
+        //Update
+        httpClient.executeCypher(baseNeoUrl(), "MATCH (p:Person {name:'Luanne'}) SET p.name='Not Luanne'");
+
+        response = httpClient.executeCypher(baseNeoUrl(), "MATCH (p:Person) RETURN p");
+
+        System.out.println(response);
+
+        createdAtMatcher = CREATED_AT_PATTERN.matcher(response);
+        assertTrue(createdAtMatcher.find());
+        String newCreatedAt = createdAtMatcher.group(1);
+
+        assertEquals(createdAt, newCreatedAt);
+
+        updatedAtMatcher = UPDATED_AT_PATTERN.matcher(response);
+        assertTrue(updatedAtMatcher.find());
+        String newUpdatedAt = updatedAtMatcher.group(1);
+
+        assertNotEquals(updatedAt, newUpdatedAt);
+    }
+
+    @Test
     public void testWorkflowWithManuallyAssignedId() {
         //Create & Assign
         httpClient.executeCypher(baseNeoUrl(), "CREATE (p:Person {name:'Luanne', uuid:'123'})");
@@ -94,6 +137,20 @@ public class UuidModuleEndToEndApiTest extends GraphAwareIntegrationTest {
         //Delete
         httpClient.executeCypher(baseNeoUrl(), "MATCH (p:Person {name:'Luanne'}) DELETE p");
         httpClient.get(baseUrl() + "/uuid/node/" + uuid, SC_NOT_FOUND);
+    }
+
+    @Test
+    public void testTimestampsWorkflowWithManuallyAssignedValue() {
+        //Create & Assign
+        httpClient.executeCypher(baseNeoUrl(), "CREATE (p:Person {name:'Luanne', createdAt:123})");
+
+        String response = httpClient.executeCypher(baseNeoUrl(), "MATCH (p:Person) RETURN p");
+
+        System.out.println(response);
+
+        Matcher createdAtMatcher = CREATED_AT_PATTERN.matcher(response);
+        assertTrue(createdAtMatcher.find());
+        assertEquals("123", createdAtMatcher.group(1));
     }
 
     @Test

@@ -40,10 +40,14 @@ public class UuidModuleEndToEndMinimalTest extends GraphAwareIntegrationTest {
         try (Transaction tx = getDatabase().beginTx()) {
             for (Node node : Iterables.asResourceIterable(getDatabase().getAllNodes())) {
                 assertTrue(node.hasProperty("uuid"));
+                assertTrue(node.hasProperty("createdAt"));
+                assertTrue(node.hasProperty("updatedAt"));
             }
 
             for (Relationship rel : Iterables.asResourceIterable(getDatabase().getAllRelationships())) {
                 assertFalse(rel.hasProperty("uuid"));
+                assertFalse(rel.hasProperty("createdAt"));
+                assertFalse(rel.hasProperty("updatedAt"));
             }
 
             tx.success();

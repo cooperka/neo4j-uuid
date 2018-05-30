@@ -36,6 +36,9 @@ public class UuidModule extends BaseTxDrivenModule<Void> {
     public static final String DEFAULT_MODULE_ID = "UIDM";
     private static final int BATCH_SIZE = 1000;
 
+    private static final String CREATED_AT_PROPERTY = "createdAt";
+    private static final String UPDATED_AT_PROPERTY = "updatedAt";
+
     private final UuidGenerator uuidGenerator;
     private final UuidConfiguration uuidConfiguration;
     private final UuidIndexer uuidIndexer;
@@ -121,10 +124,12 @@ public class UuidModule extends BaseTxDrivenModule<Void> {
      */
     @Override
     public Void beforeCommit(ImprovedTransactionData transactionData) throws DeliberateTransactionRollbackException {
+        long timestamp = System.currentTimeMillis();
 
         //Set the UUID on all created nodes
         for (Node node : transactionData.getAllCreatedNodes()) {
             assignUuid(node);
+            assignCreatedAt(node, timestamp);
         }
 
         for (Node node : transactionData.getAllDeletedNodes()) {
@@ -133,6 +138,8 @@ public class UuidModule extends BaseTxDrivenModule<Void> {
 
         //Check if the UUID has been modified or removed from the node and throw an error if immutability is true
         for (Change<Node> change : transactionData.getAllChangedNodes()) {
+            assignUpdatedAt(change.getCurrent(), timestamp);
+
             if (!change.getCurrent().hasProperty(uuidConfiguration.getUuidProperty())) {
                 if (isImmutable()) {
                     throw new DeliberateTransactionRollbackException("You are not allowed to remove the " + uuidConfiguration.getUuidProperty() + " property");
@@ -155,6 +162,7 @@ public class UuidModule extends BaseTxDrivenModule<Void> {
         //Set the UUID on all created relationships
         for (Relationship relationship : transactionData.getAllCreatedRelationships()) {
             assignUuid(relationship);
+            assignCreatedAt(relationship, timestamp);
         }
 
         for (Relationship rel : transactionData.getAllDeletedRelationships()) {
@@ -163,6 +171,8 @@ public class UuidModule extends BaseTxDrivenModule<Void> {
 
         //Check if the UUID has been modified or removed from the relationship and throw an error if immutability is true
         for (Change<Relationship> change : transactionData.getAllChangedRelationships()) {
+            assignUpdatedAt(change.getCurrent(), timestamp);
+
             if (!change.getCurrent().hasProperty(uuidConfiguration.getUuidProperty())) {
                 if (isImmutable()) {
                     throw new DeliberateTransactionRollbackException("You are not allowed to remove the " + uuidConfiguration.getUuidProperty() + " property");
@@ -219,6 +229,24 @@ public class UuidModule extends BaseTxDrivenModule<Void> {
         if (existingEntity != null && (existingEntity.getId() != entity.getId())) {
             throw new DeliberateTransactionRollbackException("Another " + existingEntity.getClass().getName() + " with UUID " + entity.getProperty(uuidProperty).toString() + " already exists (#" + existingEntity.getId() + ")!");
         }
+    }
+
+    private void assignCreatedAt(Entity entity, long timestamp) {
+        // Don't overwrite if it already exists.
+        if (!entity.hasProperty(CREATED_AT_PROPERTY)) {
+            assignNewCreatedAt(entity, timestamp);
+        }
+
+        // Always assign updatedAt.
+        assignUpdatedAt(entity, timestamp);
+    }
+
+    private void assignNewCreatedAt(Entity entity, long timestamp) {
+        entity.setProperty(CREATED_AT_PROPERTY, timestamp);
+    }
+
+    private void assignUpdatedAt(Entity entity, long timestamp) {
+        entity.setProperty(UPDATED_AT_PROPERTY, timestamp);
     }
 
     private boolean isImmutable() {
